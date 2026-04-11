@@ -2,6 +2,12 @@
 
 A production-ready URL shortener built with Node.js, Express, PostgreSQL, and Redis.
 
+## Live Demo
+https://shrinkr-zlrw.onrender.com
+
+> Note: Hosted on Render free tier — 
+> first request may take 30-60 seconds to wake up
+
 ## Features
 - Auto-generate unique short codes
 - Redis caching for fast redirects
