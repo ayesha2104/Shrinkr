@@ -1,4 +1,4 @@
-# Shrinkr
+# URL Shortener API
 
 A production-ready URL shortener built with Node.js, Express, PostgreSQL, and Redis.
 
