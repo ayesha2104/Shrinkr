@@ -10,14 +10,19 @@ const urlSchema = Joi.object({
         .messages({
             'string.uri': 'original_url must be a valid URL starting with http or https',
             'any.required': 'original_url is required'
-        })
+        }),
+    expires_in_days: Joi.number()
+        .integer()
+        .min(1)
+        .max(365)
+        .optional() // not required — defaults to 30
 });
 
 const createUrl = async (req, res) => {
     const { error, value } = urlSchema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const { original_url } = value;
+    const { original_url, expires_in_days = 30 } = value;
 
     try {
         let short_code;
@@ -32,15 +37,18 @@ const createUrl = async (req, res) => {
         }
 
         const result = await pool.query(
-            'INSERT INTO urls (original_url, short_code) VALUES ($1, $2) RETURNING *',
-            [original_url, short_code]
+            `INSERT INTO urls (original_url, short_code, expires_at) 
+       VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 day' * $3) 
+       RETURNING *`,
+            [original_url, short_code, expires_in_days]
         );
 
         res.status(201).json({
             message: 'Short URL created',
             short_code: result.rows[0].short_code,
             short_url: `http://localhost:3000/${result.rows[0].short_code}`,
-            original_url: result.rows[0].original_url
+            original_url: result.rows[0].original_url,
+            expires_at: result.rows[0].expires_at
         });
     } catch (err) {
         console.error(err);
@@ -115,8 +123,10 @@ const deleteUrl = async (req, res) => {
 
 const redirectUrl = async (req, res) => {
     const { shortCode } = req.params;
+
     try {
         const cached = await redisClient.get(shortCode);
+
         if (cached) {
             console.log('Cache HIT →', shortCode);
             pool.query(
@@ -126,20 +136,37 @@ const redirectUrl = async (req, res) => {
         }
 
         console.log('Cache MISS →', shortCode);
+
         const result = await pool.query(
             'SELECT * FROM urls WHERE short_code = $1', [shortCode]
         );
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Short URL not found' });
         }
 
         const url = result.rows[0];
+
+        // Check if URL has expired
+        if (new Date() > new Date(url.expires_at)) {
+            // Delete from database — it's done
+            await pool.query('DELETE FROM urls WHERE short_code = $1', [shortCode]);
+            // Make sure it's not in cache either
+            await redisClient.del(shortCode);
+
+            return res.status(410).json({
+                error: 'This short URL has expired and is no longer available'
+            });
+        }
+
+        // Not expired — cache and redirect
         await redisClient.set(shortCode, url.original_url, { EX: 3600 });
         await pool.query(
             'UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]
         );
 
         res.redirect(302, url.original_url);
+
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
