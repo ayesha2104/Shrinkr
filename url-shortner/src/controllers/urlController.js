@@ -46,7 +46,7 @@ const createUrl = async (req, res) => {
         res.status(201).json({
             message: 'Short URL created',
             short_code: result.rows[0].short_code,
-            short_url: `http://localhost:3000/${result.rows[0].short_code}`,
+            short_url: `${process.env.BASE_URL || 'http://localhost:3000'}/${result.rows[0].short_code}`,
             original_url: result.rows[0].original_url,
             expires_at: result.rows[0].expires_at
         });
