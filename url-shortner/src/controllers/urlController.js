@@ -3,6 +3,18 @@ const redisClient = require('../config/redis');
 const generateShortCode = require('../utils/generateShortCode');
 const Joi = require('joi');
 
+const getPublicBaseUrl = (req) => {
+    const forwardedProto = req.get('x-forwarded-proto');
+    const protocol = forwardedProto ? forwardedProto.split(',')[0].trim() : req.protocol;
+    const host = req.get('host');
+
+    if (host) {
+        return `${protocol}://${host}`.replace(/\/$/, '');
+    }
+
+    return (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+};
+
 const urlSchema = Joi.object({
     original_url: Joi.string()
         .uri({ scheme: ['http', 'https'] })
@@ -46,7 +58,7 @@ const createUrl = async (req, res) => {
         res.status(201).json({
             message: 'Short URL created',
             short_code: result.rows[0].short_code,
-            short_url: `${process.env.BASE_URL || 'http://localhost:3000'}/${result.rows[0].short_code}`,
+            short_url: `${getPublicBaseUrl(req)}/${result.rows[0].short_code}`,
             original_url: result.rows[0].original_url,
             expires_at: result.rows[0].expires_at
         });
@@ -61,6 +73,7 @@ const getAllUrls = async (req, res) => {
         const result = await pool.query('SELECT * FROM urls ORDER BY created_at DESC');
         res.status(200).json({ count: result.rows.length, data: result.rows });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Database error' });
     }
 };
@@ -76,6 +89,7 @@ const getUrl = async (req, res) => {
         }
         res.status(200).json({ data: result.rows[0] });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Database error' });
     }
 };
@@ -117,6 +131,7 @@ const deleteUrl = async (req, res) => {
         }
         res.status(200).json({ message: 'Deleted successfully', data: result.rows[0] });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Database error' });
     }
 };
