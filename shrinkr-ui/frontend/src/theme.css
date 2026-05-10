@@ -1,0 +1,70 @@
+/*
+  theme.css — import once at the top of main.jsx / index.jsx
+  All Shrinkr components read from these CSS variables.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Playfair+Display:wght@400;500&display=swap');
+
+/* ── Light (default) ── */
+:root,
+[data-theme="light"] {
+    --bg: #f9f8f6;
+    --bg-inset: #ffffff;
+    --border: #e5e2dc;
+    --border-soft: #d0ceca;
+    --text: #111111;
+    --text-muted: #777777;
+    --text-faint: #aaaaaa;
+    --text-placeholder: #bbbbbb;
+    --accent: #111111;
+    --accent-fg: #f9f8f6;
+    --accent-hover: #333333;
+    --error-bg: #fdf5f5;
+    --error-border: #c0392b;
+    --error-text: #c0392b;
+    --success-bg: #f4fdf7;
+    --success-border: #27ae60;
+    --success-text: #27ae60;
+    --toggle-track: #e5e2dc;
+    --toggle-thumb: #111111;
+}
+
+/* ── Dark ── */
+[data-theme="dark"] {
+    --bg: #111111;
+    --bg-inset: #1a1a1a;
+    --border: #2a2a2a;
+    --border-soft: #333333;
+    --text: #f9f8f6;
+    --text-muted: #888888;
+    --text-faint: #555555;
+    --text-placeholder: #444444;
+    --accent: #f9f8f6;
+    --accent-fg: #111111;
+    --accent-hover: #e0deda;
+    --error-bg: #1f0f0f;
+    --error-border: #c0392b;
+    --error-text: #e57373;
+    --success-bg: #0f1f14;
+    --success-border: #27ae60;
+    --success-text: #66bb8a;
+    --toggle-track: #2a2a2a;
+    --toggle-thumb: #f9f8f6;
+}
+
+/* ── Smooth transitions ── */
+*,
+*::before,
+*::after {
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    margin: 0;
+}
