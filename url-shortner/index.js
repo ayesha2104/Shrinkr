@@ -33,7 +33,7 @@ app.get('/health', async (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/urls', urlRouter);
-// app.get('/:shortCode', redirectUrl);
+app.get('/:shortCode', redirectUrl);
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
