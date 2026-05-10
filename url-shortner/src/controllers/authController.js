@@ -41,7 +41,7 @@ exports.register = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRY }
+            { expiresIn: process.env.JWT_EXPIRY || '7d' }
         );
 
         res.status(201).json({
@@ -122,7 +122,7 @@ exports.googleCallback = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRY }
+            { expiresIn: process.env.JWT_EXPIRY || '7d' }
         );
 
         // Redirect to frontend with token
