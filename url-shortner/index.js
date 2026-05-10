@@ -12,7 +12,10 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+    origin: 'https://shrinkr-urlshortner.onrender.com/',  // Use YOUR actual URL
+    credentials: true
+}));
 app.set('trust proxy', 1);
 
 app.use(express.json());
