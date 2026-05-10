@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { globalLimiter } = require('./src/middlewares/rateLimiter');
-const urlRouter = require('./src/routes/urlRoutes');
+const { urlRouter, = require('./src/routes/urlRoutes');
 const authRoutes = require('./src/routes/authRoutes');
 const pool = require('./src/config/db');
 const cors = require('cors');
@@ -32,8 +32,36 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+// Redirect endpoint - root level
+app.get('/:shortCode', async (req, res) => {
+    try {
+        const { shortCode } = req.params;
+        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Short code not found' });
+        }
+
+        const urlData = result.rows[0];
+
+        // Check if expired
+        if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
+            return res.status(410).json({ error: 'This shortened URL has expired' });
+        }
+
+        // Increment clicks
+        await pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]);
+
+        // Redirect
+        res.redirect(urlData.original_url);
+    } catch (err) {
+        console.error('Redirect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.use('/urls', urlRouter);
-app.get('/:shortCode', redirectUrl);
+
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
