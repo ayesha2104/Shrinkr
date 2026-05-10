@@ -1,191 +1,274 @@
 const pool = require('../config/db');
-const redisClient = require('../config/redis');
+const redis = require('../config/redis');
 const generateShortCode = require('../utils/generateShortCode');
 const Joi = require('joi');
 
-const getPublicBaseUrl = (req) => {
-    const forwardedProto = req.get('x-forwarded-proto');
-    const protocol = forwardedProto ? forwardedProto.split(',')[0].trim() : req.protocol;
-    const host = req.get('host');
-
-    if (host) {
-        return `${protocol}://${host}`.replace(/\/$/, '');
-    }
-
-    return (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
-};
-
+// Validation schema for creating URLs
 const urlSchema = Joi.object({
-    original_url: Joi.string()
-        .uri({ scheme: ['http', 'https'] })
-        .required()
-        .messages({
-            'string.uri': 'original_url must be a valid URL starting with http or https',
-            'any.required': 'original_url is required'
-        }),
-    expires_in_days: Joi.number()
-        .integer()
-        .min(1)
-        .max(365)
-        .optional() // not required — defaults to 30
+    original_url: Joi.string().uri().required(),
+    expiration_days: Joi.number().integer().min(1).max(365).default(30),
+    is_public: Joi.boolean().default(false)
 });
 
-const createUrl = async (req, res) => {
-    const { error, value } = urlSchema.validate(req.body);
-    if (error) return res.status(400).json({ error: error.details[0].message });
-
-    const { original_url, expires_in_days = 30 } = value;
-
+// Create a new shortened URL
+exports.createUrl = async (req, res) => {
     try {
-        let short_code;
-        let isUnique = false;
-
-        while (!isUnique) {
-            short_code = generateShortCode();
-            const existing = await pool.query(
-                'SELECT id FROM urls WHERE short_code = $1', [short_code]
-            );
-            if (existing.rows.length === 0) isUnique = true;
+        const { error, value } = urlSchema.validate(req.body);
+        if (error) {
+            return res.status(400).json({ error: error.details[0].message });
         }
 
+        const { original_url, expiration_days, is_public } = value;
+        const shortCode = generateShortCode();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + expiration_days);
+
+        // Get user_id if user is logged in (optional)
+        const userId = req.user ? req.user.id : null;
+
         const result = await pool.query(
-            `INSERT INTO urls (original_url, short_code, expires_at) 
-       VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 day' * $3) 
-       RETURNING *`,
-            [original_url, short_code, expires_in_days]
+            'INSERT INTO urls (short_code, original_url, expires_at, user_id, is_public) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [shortCode, original_url, expiresAt, userId, is_public]
         );
 
         res.status(201).json({
-            message: 'Short URL created',
-            short_code: result.rows[0].short_code,
-            short_url: `${getPublicBaseUrl(req)}/${result.rows[0].short_code}`,
-            original_url: result.rows[0].original_url,
-            expires_at: result.rows[0].expires_at
+            message: 'URL shortened successfully',
+            data: result.rows[0]
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
+        console.error('Create URL error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
-const getAllUrls = async (req, res) => {
+// Get all URLs (filtered by user if logged in)
+exports.getAllUrls = async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM urls ORDER BY created_at DESC');
-        res.status(200).json({ count: result.rows.length, data: result.rows });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
-    }
-};
+        // If user is logged in, only return their URLs
+        // If not logged in, return empty array
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required. Login to view your URLs.' });
+        }
 
-const getUrl = async (req, res) => {
-    const { shortCode } = req.params;
-    try {
         const result = await pool.query(
-            'SELECT * FROM urls WHERE short_code = $1', [shortCode]
+            'SELECT * FROM urls WHERE user_id = $1 ORDER BY created_at DESC',
+            [req.user.id]
         );
+
+        res.json({
+            message: 'URLs retrieved successfully',
+            count: result.rows.length,
+            data: result.rows
+        });
+    } catch (err) {
+        console.error('Get all URLs error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get a single URL by short code
+exports.getUrlByCode = async (req, res) => {
+    try {
+        const { shortCode } = req.params;
+
+        // First check Redis cache
+        const cachedUrl = await redis.get(`url:${shortCode}`);
+        if (cachedUrl) {
+            const urlData = JSON.parse(cachedUrl);
+
+            // If URL is private and user doesn't own it, deny access
+            if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
+                return res.status(403).json({ error: 'This URL is private' });
+            }
+
+            return res.json({
+                message: 'URL metadata retrieved (from cache)',
+                data: urlData
+            });
+        }
+
+        // If not in cache, query database
+        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Short code not found' });
         }
-        res.status(200).json({ data: result.rows[0] });
+
+        const urlData = result.rows[0];
+
+        // Check if URL is private and user doesn't own it
+        if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
+            return res.status(403).json({ error: 'This URL is private' });
+        }
+
+        // Check if URL has expired
+        if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
+            return res.status(410).json({ error: 'This shortened URL has expired' });
+        }
+
+        // Cache for 1 hour
+        await redis.set(`url:${shortCode}`, JSON.stringify(urlData), { EX: 3600 });
+
+        res.json({
+            message: 'URL metadata retrieved',
+            data: urlData
+        });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
+        console.error('Get URL error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
-const updateUrl = async (req, res) => {
-    const { shortCode } = req.params;
-    const { original_url } = req.body;
-
-    if (!original_url) {
-        return res.status(400).json({ error: 'original_url is required' });
-    }
-
+// Update a URL (only owner can update)
+exports.updateUrl = async (req, res) => {
     try {
-        const result = await pool.query(
-            'UPDATE urls SET original_url = $1 WHERE short_code = $2 RETURNING *',
-            [original_url, shortCode]
-        );
+        const { shortCode } = req.params;
+        const { original_url, is_public } = req.body;
+
+        // Must be logged in to update
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // Find the URL
+        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Short code not found' });
-        }
-
-        await redisClient.del(shortCode);
-
-        res.status(200).json({ message: 'URL updated successfully', data: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
-    }
-};
-
-const deleteUrl = async (req, res) => {
-    const { shortCode } = req.params;
-    try {
-        const result = await pool.query(
-            'DELETE FROM urls WHERE short_code = $1 RETURNING *', [shortCode]
-        );
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Short code not found' });
-        }
-        res.status(200).json({ message: 'Deleted successfully', data: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
-    }
-};
-
-const redirectUrl = async (req, res) => {
-    const { shortCode } = req.params;
-
-    try {
-        const cached = await redisClient.get(shortCode);
-
-        if (cached) {
-            console.log('Cache HIT →', shortCode);
-            pool.query(
-                'UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]
-            );
-            return res.redirect(302, cached);
-        }
-
-        console.log('Cache MISS →', shortCode);
-
-        const result = await pool.query(
-            'SELECT * FROM urls WHERE short_code = $1', [shortCode]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Short URL not found' });
         }
 
         const url = result.rows[0];
 
-        // Check if URL has expired
-        if (new Date() > new Date(url.expires_at)) {
-            // Delete from database — it's done
-            await pool.query('DELETE FROM urls WHERE short_code = $1', [shortCode]);
-            // Make sure it's not in cache either
-            await redisClient.del(shortCode);
-
-            return res.status(410).json({
-                error: 'This short URL has expired and is no longer available'
-            });
+        // Check ownership - only owner can update
+        if (url.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'You do not have permission to update this URL' });
         }
 
-        // Not expired — cache and redirect
-        await redisClient.set(shortCode, url.original_url, { EX: 3600 });
-        await pool.query(
-            'UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]
+        // Validate new URL if provided
+        if (original_url) {
+            const urlRegex = /^https?:\/\/.+/;
+            if (!urlRegex.test(original_url)) {
+                return res.status(400).json({ error: 'Invalid URL format' });
+            }
+        }
+
+        // Update URL
+        const updateResult = await pool.query(
+            'UPDATE urls SET original_url = $1, is_public = $2, updated_at = NOW() WHERE short_code = $3 RETURNING *',
+            [original_url || url.original_url, is_public !== undefined ? is_public : url.is_public, shortCode]
         );
 
-        res.redirect(302, url.original_url);
+        // Invalidate cache
+        await redis.del(`url:${shortCode}`);
 
+        res.json({
+            message: 'URL updated successfully',
+            data: updateResult.rows[0]
+        });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Update URL error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
-module.exports = { createUrl, getAllUrls, getUrl, updateUrl, deleteUrl, redirectUrl };
+// Delete a URL (only owner can delete)
+exports.deleteUrl = async (req, res) => {
+    try {
+        const { shortCode } = req.params;
+
+        // Must be logged in to delete
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // Find the URL
+        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Short code not found' });
+        }
+
+        const url = result.rows[0];
+
+        // Check ownership - only owner can delete
+        if (url.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'You do not have permission to delete this URL' });
+        }
+
+        // Delete URL
+        await pool.query('DELETE FROM urls WHERE short_code = $1', [shortCode]);
+
+        // Invalidate cache
+        await redis.del(`url:${shortCode}`);
+
+        res.json({ message: 'URL deleted successfully' });
+    } catch (err) {
+        console.error('Delete URL error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Redirect to original URL (public endpoint - no auth required)
+exports.redirect = async (req, res) => {
+    try {
+        const { shortCode } = req.params;
+
+        // Check cache first
+        const cachedUrl = await redis.get(`url:${shortCode}`);
+        if (cachedUrl) {
+            const urlData = JSON.parse(cachedUrl);
+
+            // If private URL, user must be the owner
+            if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
+                return res.status(403).json({ error: 'This URL is private' });
+            }
+
+            // Check expiration
+            if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
+                return res.status(410).json({ error: 'This shortened URL has expired' });
+            }
+
+            // Increment clicks (async, don't wait)
+            pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]);
+
+            return res.redirect(urlData.original_url);
+        }
+
+        // Query database
+        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Short code not found' });
+        }
+
+        const urlData = result.rows[0];
+
+        // If private URL, user must be the owner
+        if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
+            return res.status(403).json({ error: 'This URL is private' });
+        }
+
+        // Check expiration
+        if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
+            return res.status(410).json({ error: 'This shortened URL has expired' });
+        }
+
+        // Cache for 1 hour
+        await redis.set(`url:${shortCode}`, JSON.stringify(urlData), { EX: 3600 });
+
+        // Increment clicks (async, don't wait)
+        pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]);
+
+        res.redirect(urlData.original_url);
+    } catch (err) {
+        console.error('Redirect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Health check
+exports.health = async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        res.json({ status: 'healthy', database: 'connected' });
+    } catch (err) {
+        res.status(500).json({ status: 'unhealthy', error: 'Database connection failed' });
+    }
+};

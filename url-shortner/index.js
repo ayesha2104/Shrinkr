@@ -1,11 +1,21 @@
 require('dotenv').config();
 const express = require('express');
 const { globalLimiter } = require('./src/middlewares/rateLimiter');
-const { urlRouter, redirectUrl } = require('./src/routes/urlRoutes');
+const urlRouter = require('./src/routes/urlRoutes');
+const authRoutes = require('./src/routes/authRoutes');
 const pool = require('./src/config/db');
+const cors = require('cors');
+
+
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true
+}));
 
 app.use(express.json());
 app.use(globalLimiter);
@@ -20,8 +30,9 @@ app.get('/health', async (req, res) => {
     }
 });
 
+app.use('/auth', authRoutes);
 app.use('/urls', urlRouter);
-app.get('/:shortCode', redirectUrl);
+// app.get('/:shortCode', redirectUrl);
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
