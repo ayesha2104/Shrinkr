@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { globalLimiter } = require('./src/middlewares/rateLimiter');
-const { urlRouter, = require('./src/routes/urlRoutes');
+const urlRouter = require('./src/routes/urlRoutes');
 const authRoutes = require('./src/routes/authRoutes');
 const pool = require('./src/config/db');
 const cors = require('cors');
