@@ -27,6 +27,9 @@ router.post('/', createLimiter, optionalAuth, urlController.createUrl);
 // Get all URLs (must be logged in)
 router.get('/', authMiddleware, urlController.getAllUrls);
 
+// Health check
+router.get('/health', urlController.health);
+
 // Get single URL metadata (by short code)
 router.get('/:shortCode', optionalAuth, urlController.getUrlByCode);
 
@@ -36,7 +39,6 @@ router.put('/:shortCode', authMiddleware, urlController.updateUrl);
 // Delete a URL (must be logged in + owner)
 router.delete('/:shortCode', authMiddleware, urlController.deleteUrl);
 
-// Health check
-router.get('/health', urlController.health);
+
 
 module.exports = router;
