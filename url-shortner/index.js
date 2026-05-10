@@ -32,6 +32,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/urls', urlRouter);
 // Redirect endpoint - root level
 app.get('/:shortCode', async (req, res) => {
     try {
@@ -60,7 +61,7 @@ app.get('/:shortCode', async (req, res) => {
     }
 });
 
-app.use('/urls', urlRouter);
+
 
 
 app.listen(PORT, () => {
