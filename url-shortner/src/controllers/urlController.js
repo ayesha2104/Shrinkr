@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const redis = require('../config/redis');
 const generateShortCode = require('../utils/generateShortCode');
+const { getCachedUrl, setCachedUrl } = require('../utils/urlCache');
 const Joi = require('joi');
 
 // Validation schema for creating URLs
@@ -206,56 +207,51 @@ exports.deleteUrl = async (req, res) => {
     }
 };
 
+// Fire-and-forget click counter: the redirect does not wait for this write.
+// The .catch() is required - a rejected promise nobody handles would crash the Node process.
+// Trade-off: analytics are eventually consistent, and a click can be lost if the process
+// dies right after responding. An analytics failure must never fail a redirect.
+function recordClick(shortCode) {
+    pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode])
+        .catch((err) => console.error('Click count update failed', { shortCode, error: err.message }));
+}
+
 // Redirect to original URL (public endpoint - no auth required)
+//
+//   Redis hit                           -> redirect
+//   Redis miss / Redis unavailable      -> PostgreSQL -> populate Redis -> redirect
+//
+// Behaviour is intentionally the same as the inline handler this replaced: any short
+// code redirects regardless of is_public (is_public only guards the metadata endpoint).
 exports.redirect = async (req, res) => {
     try {
         const { shortCode } = req.params;
 
-        // Check cache first
-        const cachedUrl = await redis.get(`url:${shortCode}`);
-        if (cachedUrl) {
-            const urlData = JSON.parse(cachedUrl);
+        // 1. Redis. getCachedUrl never throws: null means "miss" or "Redis can't answer".
+        let urlData = await getCachedUrl(shortCode);
+        const servedFromCache = urlData !== null;
 
-            // If private URL, user must be the owner
-            if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
-                return res.status(403).json({ error: 'This URL is private' });
+        // 2. PostgreSQL fallback
+        if (!servedFromCache) {
+            const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: 'Short code not found' });
             }
-
-            // Check expiration
-            if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
-                return res.status(410).json({ error: 'This shortened URL has expired' });
-            }
-
-            // Increment clicks (async, don't wait)
-            pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]);
-
-            return res.redirect(urlData.original_url);
+            urlData = result.rows[0];
         }
 
-        // Query database
-        const result = await pool.query('SELECT * FROM urls WHERE short_code = $1', [shortCode]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Short code not found' });
-        }
-
-        const urlData = result.rows[0];
-
-        // If private URL, user must be the owner
-        if (!urlData.is_public && (!req.user || req.user.id !== urlData.user_id)) {
-            return res.status(403).json({ error: 'This URL is private' });
-        }
-
-        // Check expiration
+        // Check expiration (also applied to cached rows, so the 1h TTL can't extend a link's life)
         if (urlData.expires_at && new Date(urlData.expires_at) < new Date()) {
             return res.status(410).json({ error: 'This shortened URL has expired' });
         }
 
-        // Cache for 1 hour
-        await redis.set(`url:${shortCode}`, JSON.stringify(urlData), { EX: 3600 });
+        // 3. Populate the cache after a database lookup. Awaited, but bounded by a timeout
+        //    and never throws, so a slow/dead Redis can't fail or hang the redirect.
+        if (!servedFromCache) {
+            await setCachedUrl(shortCode, urlData);
+        }
 
-        // Increment clicks (async, don't wait)
-        pool.query('UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1', [shortCode]);
-
+        recordClick(shortCode);
         res.redirect(urlData.original_url);
     } catch (err) {
         console.error('Redirect error:', err);

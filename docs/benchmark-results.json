@@ -1,0 +1,484 @@
+{
+  "generatedAt": "2026-09-20T17:46:42.490Z",
+  "environment": {
+    "label": "sandbox, 2 vCPU, native PostgreSQL 16.13 + Redis 7.0.15, not containerized, not my laptop",
+    "os": "Linux 6.18.44-fc-v37 (x64)",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz x2",
+    "ramGiB": 7.84,
+    "node": "v22.22.2",
+    "npm": "10.9.7",
+    "postgres": "PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+    "postgresSettings": {
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "shared_buffers": "128MB",
+      "max_connections": "100",
+      "log_statement": "none",
+      "ssl": "on"
+    },
+    "redis": "7.0.15",
+    "loadGenerator": "built-in Node http (scripts/bench/run.js); autocannon not used",
+    "git": {
+      "head": "unavailable",
+      "uncommittedChanges": "yes (or git unavailable)"
+    },
+    "target": "127.0.0.1:55432/shrinkr_bench and 127.0.0.1:56379 (loopback only)"
+  },
+  "parameters": {
+    "requests": 10000,
+    "rounds": 3,
+    "connections": 20,
+    "seed": 42,
+    "warmup": 300,
+    "hotFraction": 0.2,
+    "hotShare": 0.8,
+    "scansPerPoll": 5,
+    "note_scansPerPoll": "calibrated at startup: how many scans of urls one runner clicks-poll registers in pg_stat_user_tables",
+    "hotUrls": 20,
+    "urlsTotal": 100,
+    "realisedHotShare": 0.8,
+    "distinctUrlsTouched": 100
+  },
+  "methodology": {
+    "cacheOff": "App started with REDIRECT_CACHE_ENABLED=false: the redirect path issues no Redis GET/SET (verified via Redis INFO commandstats).",
+    "cacheOn": "App started with REDIRECT_CACHE_ENABLED=true after every url:* key in the throwaway Redis was deleted (cold cache).",
+    "lookupVsClick": "urlLookup = SELECT ... FROM urls WHERE short_code; clickUpdate = UPDATE urls SET clicks = clicks + 1. The click UPDATE happens on every redirect in both modes.",
+    "isolation": "Local throwaway Postgres/Redis only. .env is never read; the app runs from an empty temp dir with pinned settings."
+  },
+  "summary": {
+    "cacheOff": {
+      "runs": 3,
+      "requestsPerSec": {
+        "median": 1973.03,
+        "all": [
+          1892.09,
+          1973.03,
+          2019.95
+        ]
+      },
+      "p50Ms": {
+        "median": 9.396,
+        "all": [
+          9.396,
+          9.398,
+          9.237
+        ]
+      },
+      "p95Ms": {
+        "median": 16.236,
+        "all": [
+          18.616,
+          16.236,
+          15.305
+        ]
+      },
+      "p99Ms": {
+        "median": 22.932,
+        "all": [
+          30.601,
+          22.932,
+          21.997
+        ]
+      },
+      "durationMs": {
+        "median": 5068.35,
+        "all": [
+          5285.17,
+          5068.35,
+          4950.61
+        ]
+      },
+      "clicksPendingWhenLoadEnded": {
+        "median": 0,
+        "all": [
+          0,
+          0,
+          2
+        ]
+      },
+      "clickDrainMs": {
+        "median": 0.6,
+        "all": [
+          0.6,
+          0.53,
+          50.87
+        ]
+      },
+      "requestsPerSecIncludingClickDrain": {
+        "median": 1972.82,
+        "all": [
+          1891.87,
+          1972.82,
+          1999.41
+        ]
+      },
+      "urlLookupQueries": {
+        "median": 10000,
+        "all": [
+          10000,
+          10000,
+          10000
+        ]
+      },
+      "clickUpdateQueries": {
+        "median": 10000,
+        "all": [
+          10000,
+          10000,
+          10000
+        ]
+      },
+      "totalDbQueries": {
+        "median": 20000,
+        "all": [
+          20000,
+          20000,
+          20000
+        ]
+      }
+    },
+    "cacheOn": {
+      "runs": 3,
+      "requestsPerSec": {
+        "median": 3481.29,
+        "all": [
+          3383.42,
+          3523.24,
+          3481.29
+        ]
+      },
+      "p50Ms": {
+        "median": 4.774,
+        "all": [
+          4.835,
+          4.774,
+          4.658
+        ]
+      },
+      "p95Ms": {
+        "median": 11.25,
+        "all": [
+          11.813,
+          11.037,
+          11.25
+        ]
+      },
+      "p99Ms": {
+        "median": 22.698,
+        "all": [
+          22.698,
+          22.033,
+          24.075
+        ]
+      },
+      "durationMs": {
+        "median": 2872.5,
+        "all": [
+          2955.59,
+          2838.29,
+          2872.5
+        ]
+      },
+      "clicksPendingWhenLoadEnded": {
+        "median": 2526,
+        "all": [
+          2497,
+          2526,
+          2656
+        ]
+      },
+      "clickDrainMs": {
+        "median": 362.86,
+        "all": [
+          362.86,
+          409,
+          361.52
+        ]
+      },
+      "requestsPerSecIncludingClickDrain": {
+        "median": 3079.49,
+        "all": [
+          3013.46,
+          3079.49,
+          3092.13
+        ]
+      },
+      "urlLookupQueries": {
+        "median": 112,
+        "all": [
+          112,
+          110,
+          118
+        ]
+      },
+      "clickUpdateQueries": {
+        "median": 10000,
+        "all": [
+          10000,
+          10000,
+          10000
+        ]
+      },
+      "totalDbQueries": {
+        "median": 10112,
+        "all": [
+          10112,
+          10110,
+          10118
+        ]
+      }
+    },
+    "derived": {
+      "note": "Derived from the medians above. Which of these (if any) is a defensible headline metric is decided separately.",
+      "urlLookupQueryReductionPct": 98.88,
+      "totalDbQueryReductionPct": 49.44,
+      "p50LatencyChangePct": 49.19,
+      "p95LatencyChangePct": 30.71,
+      "p99LatencyChangePct": 1.02,
+      "throughputChangePct": 76.44,
+      "cacheHitRatioOn": 0.9888
+    }
+  },
+  "runs": [
+    {
+      "mode": "off",
+      "round": 1,
+      "clearedKeysBeforeRun": 100,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 5285.17,
+      "requestsPerSec": 1892.09,
+      "clicksPendingWhenLoadEnded": 0,
+      "clickDrainMs": 0.6,
+      "requestsPerSecIncludingClickDrain": 1891.87,
+      "latencyMs": {
+        "min": 2.013,
+        "mean": 10.56,
+        "p50": 9.396,
+        "p95": 18.616,
+        "p99": 30.601,
+        "max": 41.661
+      },
+      "db": {
+        "total": 20000,
+        "urlLookup": 10000,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 1,
+        "runnerPollScans": 5,
+        "postgresTableScansDelta": 20005,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 0,
+        "redisSetCalls": 0,
+        "urlKeysInRedisAfterRun": 0
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    },
+    {
+      "mode": "on",
+      "round": 1,
+      "clearedKeysBeforeRun": 0,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 2955.59,
+      "requestsPerSec": 3383.42,
+      "clicksPendingWhenLoadEnded": 2497,
+      "clickDrainMs": 362.86,
+      "requestsPerSecIncludingClickDrain": 3013.46,
+      "latencyMs": {
+        "min": 0.921,
+        "mean": 5.906,
+        "p50": 4.835,
+        "p95": 11.813,
+        "p99": 22.698,
+        "max": 207.334
+      },
+      "db": {
+        "total": 10112,
+        "urlLookup": 112,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 8,
+        "runnerPollScans": 40,
+        "postgresTableScansDelta": 10152,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 10000,
+        "redisSetCalls": 112,
+        "urlKeysInRedisAfterRun": 100
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    },
+    {
+      "mode": "off",
+      "round": 2,
+      "clearedKeysBeforeRun": 100,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 5068.35,
+      "requestsPerSec": 1973.03,
+      "clicksPendingWhenLoadEnded": 0,
+      "clickDrainMs": 0.53,
+      "requestsPerSecIncludingClickDrain": 1972.82,
+      "latencyMs": {
+        "min": 2.519,
+        "mean": 10.128,
+        "p50": 9.398,
+        "p95": 16.236,
+        "p99": 22.932,
+        "max": 51.922
+      },
+      "db": {
+        "total": 20000,
+        "urlLookup": 10000,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 1,
+        "runnerPollScans": 5,
+        "postgresTableScansDelta": 20005,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 0,
+        "redisSetCalls": 0,
+        "urlKeysInRedisAfterRun": 0
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    },
+    {
+      "mode": "on",
+      "round": 2,
+      "clearedKeysBeforeRun": 0,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 2838.29,
+      "requestsPerSec": 3523.24,
+      "clicksPendingWhenLoadEnded": 2526,
+      "clickDrainMs": 409,
+      "requestsPerSecIncludingClickDrain": 3079.49,
+      "latencyMs": {
+        "min": 0.816,
+        "mean": 5.671,
+        "p50": 4.774,
+        "p95": 11.037,
+        "p99": 22.033,
+        "max": 106.298
+      },
+      "db": {
+        "total": 10110,
+        "urlLookup": 110,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 9,
+        "runnerPollScans": 45,
+        "postgresTableScansDelta": 10155,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 10000,
+        "redisSetCalls": 110,
+        "urlKeysInRedisAfterRun": 100
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    },
+    {
+      "mode": "off",
+      "round": 3,
+      "clearedKeysBeforeRun": 100,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 4950.61,
+      "requestsPerSec": 2019.95,
+      "clicksPendingWhenLoadEnded": 2,
+      "clickDrainMs": 50.87,
+      "requestsPerSecIncludingClickDrain": 1999.41,
+      "latencyMs": {
+        "min": 2.454,
+        "mean": 9.892,
+        "p50": 9.237,
+        "p95": 15.305,
+        "p99": 21.997,
+        "max": 64.16
+      },
+      "db": {
+        "total": 20000,
+        "urlLookup": 10000,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 2,
+        "runnerPollScans": 10,
+        "postgresTableScansDelta": 20010,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 0,
+        "redisSetCalls": 0,
+        "urlKeysInRedisAfterRun": 0
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    },
+    {
+      "mode": "on",
+      "round": 3,
+      "clearedKeysBeforeRun": 0,
+      "requests": 10000,
+      "responses302": 10000,
+      "otherResponses": {},
+      "durationMs": 2872.5,
+      "requestsPerSec": 3481.29,
+      "clicksPendingWhenLoadEnded": 2656,
+      "clickDrainMs": 361.52,
+      "requestsPerSecIncludingClickDrain": 3092.13,
+      "latencyMs": {
+        "min": 0.905,
+        "mean": 5.741,
+        "p50": 4.658,
+        "p95": 11.25,
+        "p99": 24.075,
+        "max": 255.993
+      },
+      "db": {
+        "total": 10118,
+        "urlLookup": 118,
+        "clickUpdate": 10000,
+        "other": 0
+      },
+      "crossChecks": {
+        "clicksAppliedInPostgres": 10000,
+        "runnerPollsInWindow": 8,
+        "runnerPollScans": 40,
+        "postgresTableScansDelta": 10158,
+        "postgresRowsUpdatedDelta": 10000,
+        "redisGetCalls": 10000,
+        "redisSetCalls": 118,
+        "urlKeysInRedisAfterRun": 100
+      },
+      "appProcessSurvivedRun": true,
+      "appErrorLogLines": 0,
+      "validationProblems": []
+    }
+  ]
+}

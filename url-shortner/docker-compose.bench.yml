@@ -1,0 +1,45 @@
+# Throwaway PostgreSQL + Redis for the redirect benchmark and integration tests ONLY.
+#
+#   docker compose -f docker-compose.bench.yml up -d      # start (schema is created on first start)
+#   npm run benchmark:seed && npm test && npm run benchmark
+#   docker compose -f docker-compose.bench.yml down -v    # stop and delete ALL data
+#
+# EXECUTED successfully on the user's Windows 11 laptop with Docker Desktop: PostgreSQL 16.15 on host
+# port 55433 and Redis 7.4.9 on host port 56379, both bound to 127.0.0.1. Those containers produced the
+# laptop results in docs/benchmark-results.mine.json. It was first only syntax-checked
+# (`docker compose config`) because Docker image pulls were unavailable where it was written, and the
+# sandbox results in docs/ were produced against natively installed PostgreSQL 16 / Redis 7, not against
+# these containers. It has not been tested on other machines; if it misbehaves on yours, that is a bug here.
+#
+# Ports are bound to 127.0.0.1 only and match the defaults in scripts/bench/localEnv.js
+# (Postgres 55433, Redis 56379), so the benchmark tooling needs no configuration.
+# Nothing here connects to, or is related to, any production service.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: shrinkr_bench
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - ./scripts/bench/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shrinkr_bench"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7
+    # no persistence: this is a throwaway cache
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

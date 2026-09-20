@@ -4,8 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "node index.js"
+    "test": "node --test \"test/**/*.test.js\"",
+    "dev": "node index.js",
+    "benchmark:seed": "node scripts/bench/seed.js",
+    "benchmark": "node scripts/bench/run.js"
   },
   "keywords": [],
   "author": "",
