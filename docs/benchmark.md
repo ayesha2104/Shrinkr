@@ -423,12 +423,21 @@ are never seen twice (low hit ratio). And a miss costs *more* than having no cac
   eventually consistent by design.
 - **Cache stampede and synchronised expiry** (see above).
 - **No circuit breaker.** While Redis is connected but frozen, each redirect pays the ~500 ms of timeouts.
-- **`getUrlByCode`, `updateUrl` and `deleteUrl` still call Redis directly** and return `500` if Redis is down
-  (for update/delete, after the database write already succeeded).
+- *Resolved after this benchmark was written* (the changes belong to the 2026-10-09 audit; the README sections "Testing and verification" and "Security and known limitations" describe the resulting behaviour, and the post-change benchmark evidence is `docs/benchmark-results.audit-2026-10-09.json`):
+  `getUrlByCode`, `updateUrl` and `deleteUrl` now use the same best-effort cache helpers and no longer return
+  `500` when Redis is down; cached rows are expiry-checked in `getUrlByCode`; short codes come from
+  `crypto.randomInt` with a retry on collision. The tables and sections in this document (sandbox runs A/B and
+  the 2026-09-20 laptop run) were measured on the earlier code. The benchmark was **re-run on 2026-10-09** on
+  the post-audit code (laptop, Docker Postgres 16 + Redis 7, uncontrolled background load); that run is recorded
+  only in `docs/benchmark-results.audit-2026-10-09.json` and is not folded into the tables here. It reproduced
+  the lookup result (URL lookups 10,000 → 116, −98.84%; total queries 20,000 → 10,116, −49.42%), while its
+  latency and throughput varied too much between rounds to quote. Provenance: that run was collected on a
+  working tree based on commit `4423083` with uncommitted changes (the result file records `head: 4423083` and
+  `uncommittedChanges: yes`), before the final URL-scheme validation fix that was later included in commit
+  `6273078`. It was not measured on `6273078` itself; that final fix does not touch the redirect path.
 
-Other known issues, **out of scope for this change and untouched:** short codes use `Math.random` with no
-collision handling; the global limiter allows only 100 requests per 15 minutes per IP and applies to
-redirects; `backup.sql` is tracked in git; `GET /urls/:shortCode` can serve expired URLs from cache.
+Other known issues, **out of scope for the benchmark change:** the global limiter allows only 100 requests per
+15 minutes per IP and applies to redirects; `backup.sql` is tracked in git (schema only, no rows).
 
 ## Independent reproduction — user's laptop
 
