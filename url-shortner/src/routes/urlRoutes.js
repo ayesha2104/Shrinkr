@@ -2,15 +2,11 @@ const express = require('express');
 const urlController = require('../controllers/urlController');
 const { authMiddleware, optionalAuth } = require('../middlewares/authMiddleware');
 const rateLimit = require('express-rate-limit');
+const { createUrlLimiter } = require('../middlewares/rateLimiter');
 
 const router = express.Router();
 
-// Rate limiters
-const createLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 5,
-    message: 'Too many URLs created from this IP, please try again later.'
-});
+// Rate limiters (createUrlLimiter: 5 creations / minute / IP, defined once in rateLimiter.js)
 
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -22,7 +18,7 @@ const generalLimiter = rateLimit({
 router.use(generalLimiter);
 
 // Create new shortened URL (anonymous or logged in)
-router.post('/', createLimiter, optionalAuth, urlController.createUrl);
+router.post('/', createUrlLimiter, optionalAuth, urlController.createUrl);
 
 // Get all URLs (must be logged in)
 router.get('/', authMiddleware, urlController.getAllUrls);

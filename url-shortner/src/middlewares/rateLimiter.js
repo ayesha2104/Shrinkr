@@ -27,4 +27,14 @@ const createUrlLimiter = rateLimit({
     message: { error: 'Too many URLs created, please try again after a minute' }
 });
 
-module.exports = { globalLimiter, createUrlLimiter };
+// Brute-force protection for /auth/login and /auth/register. Keyed by client IP (req.ip, which honours
+// `trust proxy`), counted in this process's memory only - see README "Known limitations".
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many authentication attempts, please try again after 15 minutes' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+module.exports = { globalLimiter, createUrlLimiter, authLimiter };

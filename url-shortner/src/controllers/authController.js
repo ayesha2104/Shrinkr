@@ -50,6 +50,10 @@ exports.register = async (req, res) => {
             token
         });
     } catch (err) {
+        // Two simultaneous registrations for one email: the UNIQUE(email) constraint rejects the loser
+        if (err.code === '23505') {
+            return res.status(409).json({ error: 'Email already registered' });
+        }
         console.error('Register error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -95,40 +99,5 @@ exports.login = async (req, res) => {
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Internal server error' });
-    }
-};
-
-// Handle Google OAuth callback
-exports.googleCallback = async (req, res) => {
-    try {
-        const { email, sub: googleId } = req.oidc.user; // `sub` is Google's user ID
-
-        // Check if user already exists with this Google ID
-        let result = await pool.query('SELECT * FROM users WHERE oauth_id = $1', [googleId]);
-
-        let user;
-        if (result.rows.length === 0) {
-            // New user - create them
-            const insertResult = await pool.query(
-                'INSERT INTO users (email, oauth_provider, oauth_id) VALUES ($1, $2, $3) RETURNING id, email',
-                [email, 'google', googleId]
-            );
-            user = insertResult.rows[0];
-        } else {
-            user = result.rows[0];
-        }
-
-        // Generate JWT token
-        const token = jwt.sign(
-            { id: user.id, email: user.email },
-            process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRY || '7d' }
-        );
-
-        // Redirect to frontend with token
-        res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
-    } catch (err) {
-        console.error('Google callback error:', err);
-        res.status(500).json({ error: 'Authentication failed' });
     }
 };

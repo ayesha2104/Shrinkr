@@ -1,5 +1,8 @@
 const jwt = require('jsonwebtoken');
 
+// Tokens are signed with jwt.sign's default (HS256); pin it so verification can never accept another algorithm.
+const JWT_VERIFY_OPTIONS = { algorithms: ['HS256'] };
+
 // Middleware: Require authentication (user must be logged in)
 exports.authMiddleware = (req, res, next) => {
     try {
@@ -12,7 +15,7 @@ exports.authMiddleware = (req, res, next) => {
         const token = authHeader.substring(7); // Remove "Bearer " prefix
 
         // Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, JWT_VERIFY_OPTIONS);
         req.user = decoded; // Attach user info to request
         next();
     } catch (err) {
@@ -31,7 +34,7 @@ exports.optionalAuth = (req, res, next) => {
 
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET, JWT_VERIFY_OPTIONS);
             req.user = decoded; // User is authenticated
         }
         // If no token or invalid token, req.user stays undefined

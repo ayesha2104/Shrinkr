@@ -49,7 +49,10 @@ async function getCachedUrl(shortCode) {
     if (!cacheEnabled() || !redis.isReady) return null;
     try {
         const raw = await withTimeout(redis.get(cacheKey(shortCode)), COMMAND_TIMEOUT_MS);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Anything that isn't a row-shaped object (e.g. "null", "42", a truncated write) counts as a miss.
+        return parsed && typeof parsed === 'object' && typeof parsed.original_url === 'string' ? parsed : null;
     } catch (err) {
         logCacheProblem('get', err);
         return null;
@@ -71,4 +74,22 @@ async function setCachedUrl(shortCode, urlData) {
     }
 }
 
-module.exports = { getCachedUrl, setCachedUrl, cacheKey, TTL_SECONDS };
+// Best-effort invalidation after a write (update/delete). Returns true if the key is gone from Redis.
+// Unlike get/set this does NOT honour REDIRECT_CACHE_ENABLED: deleting is always safe and keeps the
+// cache clean if the flag is flipped back on. If Redis can't be reached the committed database write
+// still stands; the stale entry then lives until its TTL (<= 1h), which is logged so it is visible.
+async function invalidateCachedUrl(shortCode) {
+    if (!redis.isReady) {
+        logCacheProblem('invalidate', new Error('Redis not ready; entry may stay stale until its TTL expires'));
+        return false;
+    }
+    try {
+        await withTimeout(redis.del(cacheKey(shortCode)), COMMAND_TIMEOUT_MS);
+        return true;
+    } catch (err) {
+        logCacheProblem('invalidate', err);
+        return false;
+    }
+}
+
+module.exports = { getCachedUrl, setCachedUrl, invalidateCachedUrl, cacheKey, TTL_SECONDS };

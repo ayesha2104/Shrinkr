@@ -14,7 +14,12 @@ ALTER TABLE urls ADD COLUMN IF NOT EXISTS user_id INTEGER;
 ALTER TABLE urls ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
 
 -- Add foreign key constraint
-ALTER TABLE urls ADD CONSTRAINT fk_urls_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_urls_user_id') THEN
+    ALTER TABLE urls ADD CONSTRAINT fk_urls_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 -- Create index for faster user lookups
 CREATE INDEX IF NOT EXISTS idx_urls_user_id ON urls(user_id);
