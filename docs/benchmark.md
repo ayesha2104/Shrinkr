@@ -110,9 +110,11 @@ The benchmark never uses `FLUSHALL`; it deletes only `url:*` keys.
 
 ## Commands
 
-Prerequisites: Node 18+, and a **local throwaway** PostgreSQL and Redis. The defaults the tooling expects
+Prerequisites: **Node 21+** (see below), and a **local throwaway** PostgreSQL and Redis. The defaults the tooling expects
 (override with `BENCH_DB_HOST`, `BENCH_DB_PORT`, `BENCH_DB_USER`, `BENCH_DB_PASSWORD`, `BENCH_DB_NAME`,
 `BENCH_REDIS_HOST`, `BENCH_REDIS_PORT`; hosts must be loopback):
+
+> **Why Node 21+, not Node 18+ as previously stated here:** `npm test` runs `node --test "test/**/*.test.js"`. Glob-pattern file arguments to `node --test` were added in Node.js 21 (`nodejs/node#47653`) and are a semver-major change that was never backported to the Node 20.x or 18.x lines. On Node 18 or 20 this glob is passed through literally and `node --test` finds no test files (Node 18) or fails to resolve the pattern (Node 20), so `npm test` cannot run the integration tests on those versions. The application code itself (Express 5, `pg`, `redis`) has no such requirement; only the test script does.
 
 | | Host | Port | Other |
 |---|---|---|---|
@@ -397,7 +399,7 @@ are never seen twice (low hit ratio). And a miss costs *more* than having no cac
   by PostgreSQL's and Redis's own counters, and the repeat-request behaviour is proven by an integration test
   that asserts 0 URL lookups.
 - In the sandbox, median redirect latency roughly halved (~49%) and p95 dropped by about 26–31%. The laptop runs did not reproduce a stable latency improvement (run-to-run and round-to-round variation was too large), so this holds for the sandbox only.
-- Sustained throughput rose about 56% once click-write draining is counted.
+- Sustained throughput rose about 56% once click-write draining is counted, but this is a **sandbox-only observation**: the laptop reproduction did not reproduce a stable throughput gain (round-to-round variation was larger than the cache ON/OFF difference; see [Independent reproduction — user's laptop](#independent-reproduction--users-laptop)). The result that **did** reproduce on the laptop, and is the repeatable finding of this benchmark, is the ~99% reduction in PostgreSQL URL-lookup queries in the bullet above.
 - Redirects survive Redis being unavailable, by falling back to PostgreSQL.
 
 **It does not prove:**
@@ -431,8 +433,7 @@ redirects; `backup.sql` is tracked in git; `GET /urls/:shortCode` can serve expi
 ## Independent reproduction — user's laptop
 
 The benchmark was re-run on the user's own Windows 11 laptop (an ASUS VivoBook 15), using
-`docker-compose.bench.yml` and the benchmark tooling from the Task #1 working tree (not yet committed), with
-no changes to the application code or the benchmark methodology. These results are **separate from, and do
+`docker-compose.bench.yml` and the benchmark tooling from Shrinkr commit `4423083` (`feat: make redirect caching measurable and resilient`, the completed and pushed Task #1 implementation), with no changes to the application code or the benchmark methodology. These results are **separate from, and do
 not replace,** the sandbox results above. This section reports the **latest completed laptop run**, stored in
 `docs/benchmark-results.mine.json` (generated 2026-09-20T19:45:04.306Z). The sandbox result files were not touched.
 
@@ -461,7 +462,7 @@ the same ~99% reduction in URL-lookup queries.
 | Redis | 7.4.9, in Docker Desktop (`redis:7`, `--save "" --appendonly no`) |
 | Benchmark target | PostgreSQL `127.0.0.1:55433`, Redis `127.0.0.1:56379`; both containers bound to `127.0.0.1` only |
 | Load generator | Built-in Node `http` module (`scripts/bench/run.js`), 20 keep-alive connections |
-| Shrinkr commit | Recorded as `0c05414` (the last commit) with uncommitted changes: the Task #1 working tree, before it was committed. |
+| Shrinkr commit | The tool recorded `0c05414` with uncommitted changes, because this run was made from the working tree before Task #1 was committed. That work has since been committed and pushed as `4423083` (`feat: make redirect caching measurable and resilient`); the code measured here is identical to that commit. |
 | Not recorded | Power mode / plugged-in state, background load, and Docker Desktop resource limits. |
 
 `docker-compose.bench.yml` **was executed successfully** here (it had previously only been syntax-checked):
