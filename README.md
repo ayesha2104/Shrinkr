@@ -10,6 +10,12 @@ optimisation, never a dependency.
 Built with Node.js, Express 5, PostgreSQL, and Redis. A React front end lives in
 [`shrinkr-ui/frontend/`](shrinkr-ui/frontend) (not covered by this README or by the audit).
 
+**Live deployment (Render):**
+- Front end: <https://shrinkr-urlshortner.onrender.com/login>
+- API: <https://shrinkr-zlrw.onrender.com/> (for example `GET /health`)
+
+See [Deployment status](#deployment-status) for exactly what has and has not been checked.
+
 ## Contents
 
 - [Feature highlights](#feature-highlights)
@@ -330,12 +336,23 @@ secure or production-ready. Known limitations:
 
 ## Deployment status
 
-**Unverified.** An earlier version of this README linked a Render free-tier deployment
-(`https://shrinkr-zlrw.onrender.com`). A single `GET /health` probe during the audit (2026-10-09) got no
-response within 20 s, which is consistent with a free-tier cold start but is not proof either way, so this
-README does not claim that a live deployment exists or works. The repository has no `render.yaml`, so the
-Render configuration (root directory, start command, environment variables) is not documented here, and it
-is also unconfirmed whether that database has the schema from `src/migrations/`.
+| Service | URL |
+|---|---|
+| Front end | <https://shrinkr-urlshortner.onrender.com/login> |
+| API | <https://shrinkr-zlrw.onrender.com/> |
+
+**Checked on 2026-10-09 (read-only requests only):**
+- `GET /health` and `GET /urls/health` on the API returned `200` and reported the database as connected.
+- An unknown path on the API returned a JSON `404` (`{"error":"Not found"}`), which is the behaviour introduced in commit `6273078`, so the API was running code that includes that commit.
+- The front end's `/login` page returned `200`.
+
+**Not checked:** registration, login, creating or following a link on the live service (those would write
+production data), whether the live Redis cache is configured and working (the health endpoints check only
+PostgreSQL), whether the production schema matches `src/migrations/`, and the Render settings. The repository has
+no `render.yaml`, so the Render configuration (root directory, start command, environment variables) is not
+documented here. The API requires `JWT_SECRET` to start. The earlier README noted that the first request after
+idle time can be slow. The front end falls back to the API URL above when `VITE_API_URL` is not set
+(`shrinkr-ui/frontend/src/services/api.js`).
 
 ## License and contributing
 
