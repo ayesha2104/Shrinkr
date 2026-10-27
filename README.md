@@ -268,16 +268,18 @@ the real Express app against real PostgreSQL and Redis. Coverage includes:
 Last full run: **34 passed, 0 failed, 0 skipped** (PostgreSQL 16, Redis 7). The test tooling refuses non-loopback
 database or Redis hosts, so it can never run against production.
 
-## 🔒 Known limitations
+## ⚖️ Trade-offs and what I'd change at scale
 
-Documented honestly so reviewers know exactly where the edges are:
-
-- Rate limits are in-memory and per process (not shared across instances).
-- No JWT revocation or refresh tokens; CORS allows all origins.
-- Click counts are fire-and-forget (a click can be lost on a crash).
-- A read racing an update can briefly repopulate the cache with the old row (bounded by the 1-hour TTL).
-- `GET /urls` is unpaginated; `is_public` controls metadata visibility, not redirects.
-- Database TLS does not verify the server certificate.
+| Current design | Why it's fine today | At scale |
+|---|---|---|
+| In-memory, per-process rate limits | Single instance on Render | Move limits to Redis so they're shared across instances |
+| No JWT revocation or refresh tokens | 7-day tokens, no sensitive data stored | Refresh-token rotation plus a Redis denylist for revoked tokens |
+| Fire-and-forget click counter (one `UPDATE` per redirect) | Keeps redirects fast | Buffer clicks in Redis and flush in batches, which also removes the remaining per-redirect DB write |
+| Cache-invalidation race: a read racing an update can re-cache the old row | Bounded by the 1-hour TTL | Versioned cache keys or compare-and-set on write |
+| `GET /urls` is unpaginated | Users own a small number of links | Cursor-based pagination |
+| `is_public` hides metadata, not redirects | Matches how short links are shared | Optional access-controlled redirects |
+| CORS allows all origins | Auth uses bearer tokens, not cookies | Restrict to the front-end origin via an env var |
+| Database TLS doesn't verify the server certificate | Traffic is still encrypted in transit | Pin the provider's CA certificate and set `rejectUnauthorized: true` |
 
 ## 🛣️ Roadmap
 
